@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"doppler/dopplerservice"
 	"doppler/listeners"
 	"flag"
@@ -44,13 +45,10 @@ var (
 )
 
 func main() {
-	// Put os.Exit in a deferred statement so that other defers get executed prior to
-	// the os.Exit call.
-	exitCode := 0
-	defer func() {
-		os.Exit(exitCode)
-	}()
+	os.Exit(run())
+}
 
+func run() int {
 	// Metron is intended to be light-weight so we occupy only one core
 	runtime.GOMAXPROCS(1)
 
@@ -70,8 +68,7 @@ func main() {
 	picker, err := initializeDopplerPool(config, log)
 	if err != nil {
 		log.Errorf("Could not initialize doppler connection pool: %s", err)
-		exitCode = -1
-		return
+		return -1
 	}
 	messageTagger := tagger.New(config.Deployment, config.Job, config.Index, picker)
 	aggregator := messageaggregator.New(messageTagger, log)
@@ -84,8 +81,7 @@ func main() {
 	dropsondeReader, err := networkreader.New(metronAddress, "dropsondeAgentListener", dropsondeUnmarshaller, log)
 	if err != nil {
 		log.Errorf("Failed to listen on %s: %s", metronAddress, err)
-		exitCode = 1
-		return
+		return 1
 	}
 
 	log.Info("metron started")
@@ -101,7 +97,7 @@ func main() {
 		case <-killChan:
 			log.Info("Shutting down")
 			close(statsStopChan)
-			return
+			return 0
 		}
 	}
 }
@@ -125,25 +121,25 @@ func initializeDopplerPool(conf *config.Config, logger *gosteno.Logger) (*picker
 	writers := []picker.WeightedByteWriter{udpForwarder}
 	defaultWriter := writers[0]
 
-	var tlsPool *clientpool.DopplerPool
-	if conf.PreferredProtocol == "tls" {
-		c := conf.TLSConfig
-		tlsConfig, err := listeners.NewTLSConfig(c.CertFile, c.KeyFile, c.CAFile)
+	var tcpPool *clientpool.DopplerPool
+	var tlsConfig *tls.Config
+	if conf.PreferredProtocol != "udp" {
+		if conf.PreferredProtocol == "tls" {
+			c := conf.TLSConfig
+			tlsConfig, err = listeners.NewTLSConfig(c.CertFile, c.KeyFile, c.CAFile)
+			if err != nil {
+				return nil, err
+			}
+			tlsConfig.ServerName = "doppler"
+		}
+
+		var writer picker.WeightedByteWriter
+		writer, tcpPool, err = newTCPWriter(tlsConfig, conf, logger)
 		if err != nil {
 			return nil, err
 		}
-		tlsConfig.ServerName = "doppler"
-		tlsCreator := clientpool.NewTLSClientCreator(logger, tlsConfig)
-		tlsWrapper := dopplerforwarder.NewTLSWrapper(logger)
-		tlsPool = clientpool.NewDopplerPool(logger, tlsCreator)
-		tlsForwarder := dopplerforwarder.New(tlsWrapper, tlsPool, logger)
-		tcpBatchInterval := time.Duration(conf.TCPBatchIntervalMilliseconds) * time.Millisecond
-		batchWriter, err := batch.NewWriter(tlsForwarder, conf.TCPBatchSizeBytes, tcpBatchInterval, logger)
-		if err != nil {
-			return nil, err
-		}
-		defaultWriter = batchWriter
-		writers = append(writers, batchWriter)
+		writers = append(writers, writer)
+		defaultWriter = writer
 	}
 
 	picker, err := picker.New(logger, defaultWriter, writers...)
@@ -157,12 +153,26 @@ func initializeDopplerPool(conf *config.Config, logger *gosteno.Logger) (*picker
 		for {
 			event := finder.Next()
 			udpPool.SetAddresses(event.UDPDopplers)
-			if tlsPool != nil {
-				tlsPool.SetAddresses(event.TLSDopplers)
+
+			if tcpPool != nil {
+				tcpPool.SetAddresses(event.TCPDopplers)
 			}
 		}
 	}()
 	return picker, nil
+}
+
+func newTCPWriter(tlsConfig *tls.Config, conf *config.Config, logger *gosteno.Logger) (picker.WeightedByteWriter, *clientpool.DopplerPool, error) {
+	tlsCreator := clientpool.NewTCPClientCreator(logger, tlsConfig)
+	tlsWrapper := dopplerforwarder.NewTLSWrapper(logger)
+	tlsPool := clientpool.NewDopplerPool(logger, tlsCreator)
+	tlsForwarder := dopplerforwarder.New(tlsWrapper, tlsPool, logger)
+	tcpBatchInterval := time.Duration(conf.TCPBatchIntervalMilliseconds) * time.Millisecond
+	batchWriter, err := batch.NewWriter(tlsForwarder, conf.TCPBatchSizeBytes, tcpBatchInterval, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	return batchWriter, tlsPool, nil
 }
 
 func initializeMetrics(messageTagger *tagger.Tagger, config *config.Config, stopChan chan struct{}, logger *gosteno.Logger) {

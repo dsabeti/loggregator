@@ -131,7 +131,7 @@ func eventuallyListensForUDP(address string) net.PacketConn {
 	return testServer
 }
 
-func eventuallyListensForTLS(address string) net.Listener {
+func eventuallyListensForTCP(address string) net.Listener {
 	var listener net.Listener
 
 	Eventually(func() error {

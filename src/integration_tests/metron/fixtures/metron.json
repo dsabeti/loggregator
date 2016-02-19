@@ -8,6 +8,7 @@
     "Zone": "z1",
     "Deployment": "deployment-name",
     "LoggregatorDropsondePort": 3457,
+    "PreferredProtocol" : "tcp",
     "TLSConfig": {
         "CertFile": "../fixtures/client.crt",
         "KeyFile": "../fixtures/client.key",

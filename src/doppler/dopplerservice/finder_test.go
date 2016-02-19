@@ -632,11 +632,11 @@ var _ = Describe("Finder", func() {
 			})
 		})
 
-		Context("Dopplers advertise TLS/UDP on meta and legacy root", func() {
-
+		Context("Dopplers advertise TCP/TLS/UDP on meta and legacy root", func() {
 			BeforeEach(func() {
+				preferredProtocol = "tcp"
 				metaServers = map[string][]string{
-					"z1/doppler_z1/0": []string{"udp://9.8.7.6:3457", "tls://9.8.7.6:3458"},
+					"z1/doppler_z1/0": []string{"udp://9.8.7.6:3457", "tcp://9.8.7.6:3458", "tls://9.8.7.6:3459"},
 				}
 				legacyServers = map[string]string{
 					"z1/doppler_z1/0": "9.8.7.6",
@@ -644,12 +644,13 @@ var _ = Describe("Finder", func() {
 				}
 			})
 
-			It("returns udp dopplers from meta endpoint", func() {
+			It("returns tcp dopplers from meta endpoint", func() {
 				event := finder.Next()
 				Expect(event.UDPDopplers).To(HaveLen(1))
 				Expect(event.UDPDopplers).To(ContainElement("21.22.23.24:9999"))
-				Expect(event.TLSDopplers).To(HaveLen(1))
-				Expect(event.TLSDopplers).To(ContainElement("9.8.7.6:3458"))
+				Expect(event.TCPDopplers).To(HaveLen(1))
+				Expect(event.TCPDopplers).To(ContainElement("9.8.7.6:3458"))
+				Expect(event.TLSDopplers).To(HaveLen(0))
 			})
 		})
 

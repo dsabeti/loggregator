@@ -27,10 +27,11 @@ var _ = Describe("Protocol", func() {
 	BeforeEach(func() {
 		logger = gosteno.NewLogger("test")
 		dopplerConfig = &dopplerconfig.Config{
-			Index:   0,
-			JobName: "job",
-			Zone:    "z9",
-			IncomingUDPPort: uint32(metronRunner.DropsondePort),
+			Index:           0,
+			JobName:         "job",
+			Zone:            "z9",
+			IncomingUDPPort: uint32(54321),
+			IncomingTCPPort: uint32(12345),
 			TLSListenerConfig: dopplerconfig.TLSListenerConfig{
 				Port:     uint32(port + 5),
 				CertFile: "../fixtures/server.crt",
@@ -160,7 +161,7 @@ var _ = Describe("Protocol", func() {
 			BeforeEach(func() {
 				preferredProtocol = "tls"
 				address := fmt.Sprintf("127.0.0.1:%d", dopplerConfig.TLSListenerConfig.Port)
-				tlsListener = eventuallyListensForTLS(address)
+				tlsListener = eventuallyListensForTCP(address)
 
 				connChan = make(chan net.Conn, 1)
 
@@ -182,6 +183,64 @@ var _ = Describe("Protocol", func() {
 
 			AfterEach(func() {
 				tlsListener.Close()
+			})
+
+			It("logs a sent message", func() {
+				metronConn, _ := net.Dial("udp4", metronRunner.MetronAddress())
+				metronInput := &MetronInput{
+					metronConn:   metronConn,
+					stopTheWorld: stopTheWorld,
+				}
+				originalMessage := basicValueMessage()
+				go metronInput.WriteToMetron(originalMessage)
+
+				var conn net.Conn
+				Eventually(connChan).Should(Receive(&conn))
+				buffer := make([]byte, 10)
+				n, err := conn.Read(buffer)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(BeNumerically(">", 0))
+
+				conn.Close()
+			})
+		})
+	})
+
+	Context("Doppler over TCP", func() {
+		BeforeEach(func() {
+			dopplerConfig.EnableTLSTransport = false
+			stopAnnounce = dopplerservice.Announce("127.0.0.1", time.Minute, dopplerConfig, etcdAdapter, logger)
+		})
+
+		Context("Metron prefers TCP", func() {
+			var tcpListener net.Listener
+			var connChan chan net.Conn
+
+			BeforeEach(func() {
+				preferredProtocol = "tcp"
+				address := fmt.Sprintf("127.0.0.1:%d", dopplerConfig.IncomingTCPPort)
+				tcpListener = eventuallyListensForTCP(address)
+
+				connChan = make(chan net.Conn, 1)
+
+				tcpListener := tcpListener
+				connChan := connChan
+				go func() {
+					defer GinkgoRecover()
+					for {
+						conn, err := tcpListener.Accept()
+						if err != nil {
+							return
+						}
+						if conn != nil {
+							connChan <- conn
+						}
+					}
+				}()
+			})
+
+			AfterEach(func() {
+				tcpListener.Close()
 			})
 
 			It("logs a sent message", func() {
