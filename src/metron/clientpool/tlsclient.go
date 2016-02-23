@@ -3,8 +3,8 @@ package clientpool
 import (
 	"crypto/tls"
 	"net"
-	"sync"
 	"time"
+	"errors"
 
 	"github.com/cloudfoundry/gosteno"
 )
@@ -16,12 +16,13 @@ type TLSClient struct {
 	tlsConfig *tls.Config
 	logger    *gosteno.Logger
 
-	lock sync.Mutex
+	lock chan struct{}
 	conn net.Conn
 }
 
 func NewTLSClient(logger *gosteno.Logger, address string, tlsConfig *tls.Config) *TLSClient {
 	return &TLSClient{
+		lock: make(chan struct{}, 1),
 		address:   address,
 		tlsConfig: tlsConfig,
 		logger:    logger,
@@ -50,8 +51,8 @@ func (c *TLSClient) Address() string {
 }
 
 func (c *TLSClient) Close() error {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.lock <- struct{}{}
+	defer func() {<-c.lock}()
 	if c.conn == nil {
 		return nil
 	}
@@ -79,16 +80,19 @@ func (c *TLSClient) Write(data []byte) (int, error) {
 		return 0, nil
 	}
 
-	c.lock.Lock()
+	select {
+	case c.lock <- struct{}{}:
+	default:
+		return 0, errors.New("TLS client already in use")
+	}
+	defer func() {<-c.lock}()
 	if c.conn == nil {
 		if err := c.Connect(); err != nil {
-			c.lock.Unlock()
 			c.logError(err)
 			return 0, err
 		}
 	}
 	conn := c.conn
-	c.lock.Unlock()
 
 	written, err := conn.Write(data)
 	if err != nil {
