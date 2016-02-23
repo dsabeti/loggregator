@@ -81,9 +81,6 @@ func NewWriter(writer WeightedWriter, bufferCapacity uint64, flushDuration time.
 }
 
 func (w *Writer) Write(msgBytes []byte) (int, error) {
-	w.msgBufferLock.Lock()
-	defer w.msgBufferLock.Unlock()
-
 	buffer := bytes.NewBuffer(make([]byte, 0, len(msgBytes)*2))
 	err := binary.Write(buffer, binary.LittleEndian, uint32(len(msgBytes)))
 	if err != nil {
@@ -95,25 +92,25 @@ func (w *Writer) Write(msgBytes []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	w.msgBufferLock.Lock()
 	switch {
 	case w.msgBuffer.Len()+buffer.Len() > w.msgBuffer.Cap():
-		sent, err := w.retryWrites(buffer.Bytes())
-		if err != nil {
-			dropped := w.msgBuffer.messages + 1
-			metrics.BatchAddCounter("MessageBuffer.droppedMessageCount", dropped)
-			w.msgBuffer.Reset()
-			logMsg, marshalErr := proto.Marshal(w.droppedLogMessage(dropped))
-			if marshalErr != nil {
-				w.logger.Fatalf("Failed to marshal generated log message: %s", logMsg)
+		messages := w.msgBuffer.messages
+		w.msgBufferLock.Unlock()
+		go func() {
+			_, dropped, err := w.retryWrites(buffer.Bytes())
+			if err != nil {
+				metrics.BatchAddCounter("MessageBuffer.droppedMessageCount", uint64(dropped))
+				logMsg, marshalErr := proto.Marshal(w.droppedLogMessage(uint64(dropped)))
+				if marshalErr != nil {
+					w.logger.Fatalf("Failed to marshal generated log message: %s", logMsg)
+				}
+				w.Write(logMsg)
 			}
-
-			// w.Write has to be called in a goroutine to allow the defer
-			// statement to unlock the mutex lock
-			go w.Write(logMsg)
-			return 0, err
-		}
-		return sent, nil
+		}()
+		return int(messages), nil
 	default:
+		defer w.msgBufferLock.Unlock()
 		if w.msgBuffer.Len() == 0 {
 			w.timer.Reset(w.flushDuration)
 		}
@@ -125,26 +122,30 @@ func (w *Writer) Stop() {
 	w.timer.Stop()
 }
 
-func (w *Writer) flushWrite(bytes []byte) (int, error) {
-	w.writerLock.Lock()
-	defer w.writerLock.Unlock()
-
-	toWrite := make([]byte, 0, w.msgBuffer.Len()+len(bytes))
+func (w *Writer) buffer(addedMessage []byte) ([]byte, uint) {
+	toWrite := make([]byte, 0, w.msgBuffer.Len()+len(addedMessage))
 	toWrite = append(toWrite, w.msgBuffer.Bytes()...)
-	toWrite = append(toWrite, bytes...)
+	toWrite = append(toWrite, addedMessage...)
 
 	bufferMessageCount := w.msgBuffer.messages
-	if len(bytes) > 0 {
+	if len(addedMessage) > 0 {
 		bufferMessageCount++
 	}
-	sent, err := w.outWriter.Write(toWrite)
+	w.msgBuffer.Reset()
+	return toWrite, uint(bufferMessageCount)
+}
+
+
+func (w *Writer) flushWrite(bytes []byte, messages uint) (int, error) {
+	w.writerLock.Lock()
+	defer w.writerLock.Unlock()
+	sent, err := w.outWriter.Write(bytes)
 	if err != nil {
 		w.logger.Warnf("Received error while trying to flush TCP bytes: %s", err)
 		return 0, err
 	}
 
-	metrics.BatchAddCounter("DopplerForwarder.sentMessages", bufferMessageCount)
-	w.msgBuffer.Reset()
+	metrics.BatchAddCounter("DopplerForwarder.sentMessages", uint64(messages))
 	return sent, nil
 }
 
@@ -156,11 +157,13 @@ func (w *Writer) flushOnTimer() {
 
 func (w *Writer) flushBuffer() {
 	w.msgBufferLock.Lock()
-	defer w.msgBufferLock.Unlock()
 	if w.msgBuffer.messages == 0 {
+		w.msgBufferLock.Unlock()
 		return
 	}
-	if _, err := w.flushWrite(nil); err != nil {
+	flushBytes, messages := w.buffer(nil)
+	w.msgBufferLock.Unlock()
+	if _, err := w.flushWrite(flushBytes, messages); err != nil {
 		metrics.BatchIncrementCounter("DopplerForwarder.retryCount")
 		w.timer.Reset(w.flushDuration)
 	}
@@ -170,17 +173,20 @@ func (w *Writer) Weight() int {
 	return w.outWriter.Weight()
 }
 
-func (w *Writer) retryWrites(message []byte) (sent int, err error) {
+func (w *Writer) retryWrites(message []byte) (sent, dropped int, err error) {
+	w.msgBufferLock.Lock()
+	flushBytes, messages := w.buffer(message)
+	w.msgBufferLock.Unlock()
 	for i := 0; i < maxOverflowTries; i++ {
 		if i > 0 {
 			metrics.BatchIncrementCounter("DopplerForwarder.retryCount")
 		}
-		sent, err = w.flushWrite(message)
+		sent, err = w.flushWrite(flushBytes, messages)
 		if err == nil {
-			return sent, nil
+			return sent, 0, nil
 		}
 	}
-	return 0, err
+	return 0, int(messages), err
 }
 
 func (w *Writer) droppedLogMessage(droppedMessages uint64) *events.Envelope {
