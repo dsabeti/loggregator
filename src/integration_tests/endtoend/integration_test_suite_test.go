@@ -71,7 +71,7 @@ var _ = JustBeforeEach(func() {
 	LocalIPAddress, err = localip.LocalIP()
 	Expect(err).ToNot(HaveOccurred())
 
-	metronSession = startComponent(metronExecutablePath, "metron", BLUE, "--config=fixtures/metron.json")
+	metronSession = startComponent(metronExecutablePath, "metron", BLUE, "--config=fixtures/metron.json --debug")
 
 	tcSession = startComponent(trafficControllerExecutablePath, "tc", LIGHT_BLUE, "--config=fixtures/trafficcontroller.json", "--disableAccessControl")
 

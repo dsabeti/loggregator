@@ -41,10 +41,10 @@ files:
 - loggregator/src/metron/writers/*.go # gosub
 - loggregator/src/metron/writers/batch/*.go # gosub
 - loggregator/src/metron/writers/dopplerforwarder/*.go # gosub
+- loggregator/src/metron/writers/eventmarshaller/*.go # gosub
 - loggregator/src/metron/writers/eventunmarshaller/*.go # gosub
 - loggregator/src/metron/writers/messageaggregator/*.go # gosub
 - loggregator/src/metron/writers/mocks/*.go # gosub
-- loggregator/src/metron/writers/picker/*.go # gosub
 - loggregator/src/metron/writers/tagger/*.go # gosub
 - loggregator/src/profiler/*.go # gosub
 - loggregator/src/signalmanager/*.go # gosub

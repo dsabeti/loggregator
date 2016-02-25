@@ -27,9 +27,9 @@ var _ = Describe("Protocol", func() {
 	BeforeEach(func() {
 		logger = gosteno.NewLogger("test")
 		dopplerConfig = &dopplerconfig.Config{
-			Index:   0,
-			JobName: "job",
-			Zone:    "z9",
+			Index:           0,
+			JobName:         "job",
+			Zone:            "z9",
 			IncomingUDPPort: uint32(metronRunner.DropsondePort),
 			TLSListenerConfig: dopplerconfig.TLSListenerConfig{
 				Port:     uint32(port + 5),

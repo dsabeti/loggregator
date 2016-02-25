@@ -70,7 +70,7 @@ var _ = Describe("End to end test", func() {
 		}, 1)
 	}
 
-	Context("UDP", func() {
+	FContext("UDP", func() {
 		BeforeEach(func() {
 			dopplerConfig = "dopplerudp"
 		})
