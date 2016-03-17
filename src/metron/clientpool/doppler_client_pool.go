@@ -58,10 +58,7 @@ func (pool *DopplerPool) SetAddresses(addresses []string) int {
 		}
 		clients = append(clients, client)
 	}
-	pool.lock.Lock()
-	defer pool.lock.Unlock()
-	pool.clients = clients
-	return len(pool.clients)
+	return pool.setClients(clients)
 }
 
 func (pool *DopplerPool) Clients() []Client {
@@ -87,5 +84,16 @@ func (pool *DopplerPool) RandomClient() (dopplerforwarder.Client, error) {
 func (pool *DopplerPool) Size() int {
 	pool.lock.RLock()
 	defer pool.lock.RUnlock()
+	return len(pool.clients)
+}
+
+func (pool *DopplerPool) setClients(newClientList []Client) int {
+	pool.lock.Lock()
+	defer pool.lock.Unlock()
+	for _, client := range pool.clients {
+		err := client.Close()
+		pool.logger.Errorf("Error closing previous doppler connection for %s: %v", client.Address(), err)
+	}
+	pool.clients = newClientList
 	return len(pool.clients)
 }
