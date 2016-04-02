@@ -1,5 +1,10 @@
 ---
 name: metron_agent
+
+consumes:
+- name: etcd
+  type: etcd
+
 templates:
   metron_agent_ctl.erb: bin/metron_agent_ctl
   metron_agent.json.erb: config/metron_agent.json

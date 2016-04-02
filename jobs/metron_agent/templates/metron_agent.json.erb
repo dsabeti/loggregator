@@ -4,9 +4,21 @@
   "Zone": "<%= p("metron_agent.zone") %>",
   "Deployment": "<%= p("metron_agent.deployment") %>",
 
-  "EtcdUrls": [<%= p("loggregator.etcd.machines").map{|addr| "\"http://#{addr}:4001\""}.join(",")%>],
-  "EtcdMaxConcurrentRequests": <%= p("loggregator.etcd.maxconcurrentrequests") %>,
 
+<%
+  etcd_config = nil
+  if_link("etcd") do |etcd|
+    etcd_config = {}
+    etcd_config["machines"] = etcd.p("etcd.machines")
+  end
+
+  etcd_config = p("loggregator.etcd") unless etcd_config
+%>
+
+
+  "EtcdUrls": [<%= etcd_config["machines"].map{|addr| "\"http://#{addr}:4001\""}.join(",")%>],
+  "EtcdMaxConcurrentRequests": <%= etcd_config["maxconcurrentrequests"] %>,
+  
   "SharedSecret": "<%= p("metron_endpoint.shared_secret") %>",
 
   "IncomingUDPPort": <%= p("metron_agent.dropsonde_incoming_port") %>,

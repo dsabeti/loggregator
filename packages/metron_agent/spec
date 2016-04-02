@@ -1,5 +1,8 @@
 ---
 name: metron_agent
+consumes:
+- name: etcd
+  type: etcd
 dependencies:
 - golang1.5
 files:
