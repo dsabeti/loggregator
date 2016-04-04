@@ -10,6 +10,7 @@
   if_link("etcd") do |etcd|
     etcd_config = {}
     etcd_config["machines"] = etcd.p("etcd.machines")
+    etcd_config["maxconcurrentrequests"] = etcd.p("etcd.maxconcurrentrequests")
   end
 
   etcd_config = p("loggregator.etcd") unless etcd_config
