@@ -1,5 +1,8 @@
 ---
 name: syslog_drain_binder
+consumes:
+  - name: etcd
+    type: etcd
 templates:
   syslog_drain_binder_ctl.erb: bin/syslog_drain_binder_ctl
   syslog_drain_binder.json.erb: config/syslog_drain_binder.json

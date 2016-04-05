@@ -1,5 +1,8 @@
 ---
 name: doppler
+consumes:
+  - name: etcd
+    type: etcd
 templates:
   doppler_ctl.erb: bin/doppler_ctl
   doppler.json.erb: config/doppler.json

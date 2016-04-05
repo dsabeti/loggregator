@@ -1,5 +1,8 @@
 ---
 name: loggregator_trafficcontroller
+consumes:
+  - name: etcd
+    type: etcd
 templates:
   loggregator_trafficcontroller_ctl.erb: bin/loggregator_trafficcontroller_ctl
   loggregator_trafficcontroller.json.erb: config/loggregator_trafficcontroller.json
