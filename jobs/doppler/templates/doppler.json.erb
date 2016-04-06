@@ -1,17 +1,7 @@
 <% require 'json' %>
 {
 
-<%
-  etcd_config = nil
-  if_link("etcd") do |etcd|
-    etcd_config = {}
-    etcd_config["machines"] = etcd.p("etcd.machines")
-  end
-
-  etcd_config = p("loggregator.etcd") unless etcd_config
-%>
-
-  "EtcdUrls": [<%= etcd_config["machines"].map{|addr| "\"http://#{addr}:4001\""}.join(",")%>],
+  "EtcdUrls": [<%= link("etcd").instances.map{|instance| "\"http://#{instance.address}:4001\""}.join(",")%>],
   "EtcdMaxConcurrentRequests": 10,
   "MessageDrainBufferSize": <%= p("doppler.message_drain_buffer_size") %>,
   "LegacyIncomingMessagesPort": <%= p("doppler.incoming_port") %>,

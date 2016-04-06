@@ -1,19 +1,10 @@
 {
     "JobName": "<%= name %>",
     "JobIndex": <%= spec.index %>,
-<%
-  etcd_config = nil
-  if_link("etcd") do |etcd|
-    etcd_config = {}
-    etcd_config["machines"] = etcd.p("etcd.machines")
-    etcd_config["maxconcurrentrequests"] = etcd.p("etcd.maxconcurrentrequests")
-  end
 
-  etcd_config = p("loggregator.etcd") unless etcd_config
-%>
-
-    "EtcdUrls": [<%= etcd_config["machines"].map{|addr| "\"http://#{addr}:4001\""}.join(",")%>],
-    "EtcdMaxConcurrentRequests": <%= etcd_config["maxconcurrentrequests"] %>,
+    <% etcd = link("etcd") %>
+    "EtcdUrls": [<%= etcd.instances.map{|instance| "\"http://#{instance.address}:4001\""}.join(",")%>],
+    "EtcdMaxConcurrentRequests": <%= etcd.p("maxconcurrentrequests") %>,
     "OutgoingDropsondePort": <%= p("loggregator.outgoing_dropsonde_port") %>,
     "DopplerPort": <%= p("loggregator.doppler_port") %>,
     "OutgoingPort": <%= p("traffic_controller.outgoing_port") %>,
