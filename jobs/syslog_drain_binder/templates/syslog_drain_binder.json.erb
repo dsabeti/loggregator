@@ -6,7 +6,7 @@
 
     <% etcd = link("etcd") %>
     "EtcdUrls": [<%= etcd.instances.map{|instance| "\"http://#{instance.address}:4001\""}.join(",")%>],
-    "EtcdMaxConcurrentRequests": <%= etcd.p("maxconcurrentrequests") %>,
+    "EtcdMaxConcurrentRequests": <%= etcd.p("etcd.maxconcurrentrequests") %>,
 
     "MetronAddress": "<%= p("metron_endpoint.host") %>:<%= p("metron_endpoint.dropsonde_port") %>",
 
